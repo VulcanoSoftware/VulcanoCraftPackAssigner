@@ -1,0 +1,13 @@
+name: AssignPack
+main: be.vulcanosoftware.assignpack.AssignPack
+version: 1.0
+api-version: 1.21
+commands:
+  assignpack:
+    description: Assign a resource pack to a player
+    usage: /assignpack <player> <url>
+    permission: assignpack.use
+permissions:
+  assignpack.use:
+    description: Allows use of /assignpack
+    default: op

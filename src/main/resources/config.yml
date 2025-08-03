@@ -1,0 +1,4 @@
+kick-on-decline: true
+kick-on-failure: true
+kick-message-decline: "Je moet het resourcepack accepteren om te spelen."
+kick-message-failure: "Er ging iets mis bij het downloaden van het resourcepack."
