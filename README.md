@@ -12,3 +12,5 @@ example:
 ```
 assignpack VulcanoCraft https://github.com/VulcanoSoftware/prototype/releases/download/1.0/option1.zip
 ```
+
+disclaimer: this plugin is completely written by chatgpt. i don't have knowledge of java
