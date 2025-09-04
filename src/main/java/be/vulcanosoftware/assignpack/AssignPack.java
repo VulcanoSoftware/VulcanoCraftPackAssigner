@@ -49,19 +49,14 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
     @EventHandler
     public void onPackStatus(PlayerResourcePackStatusEvent event) {
         Player player = event.getPlayer();
-        switch (event.getStatus()) {
-            case DECLINED:
-                if (config.getBoolean("kick-on-decline")) {
-                    player.kickPlayer(config.getString("kick-message-decline"));
-                }
-                break;
-            case FAILED_DOWNLOAD:
-                if (config.getBoolean("kick-on-failure")) {
-                    player.kickPlayer(config.getString("kick-message-failure"));
-                }
-                break;
-            default:
-                break;
+        if (event.getStatus() == PlayerResourcePackStatusEvent.Status.DECLINED) {
+            if (config.getBoolean("kick-on-decline")) {
+                player.kickPlayer(config.getString("kick-message-decline"));
+            }
+        } else if (event.getStatus() == PlayerResourcePackStatusEvent.Status.FAILED_DOWNLOAD) {
+            if (config.getBoolean("kick-on-failure")) {
+                player.kickPlayer(config.getString("kick-message-failure"));
+            }
         }
         pendingPacks.remove(player.getUniqueId());
     }
