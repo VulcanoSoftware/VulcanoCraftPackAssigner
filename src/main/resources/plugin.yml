@@ -1,4 +1,4 @@
-name: AssignPack
+name: VulcanoCraftResourcePackAssigner
 main: be.vulcanosoftware.assignpack.AssignPack
 version: 1.0
 api-version: 1.20

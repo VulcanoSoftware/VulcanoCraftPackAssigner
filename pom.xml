@@ -4,10 +4,10 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>be.vulcanosoftware</groupId>
-    <artifactId>assignpack</artifactId>
+    <artifactId>VulcanoCraftResourcePackAssigner</artifactId>
     <version>1.0</version>
     <packaging>jar</packaging>
-    <name>AssignPack</name>
+    <name>VulcanoCraftResourcePackAssigner</name>
 
     <repositories>
         <repository>
