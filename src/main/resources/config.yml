@@ -1,4 +1,21 @@
+# Kick instellingen
 kick-on-decline: true
 kick-on-failure: true
 kick-message-decline: "Je moet het resourcepack accepteren om te spelen."
 kick-message-failure: "Er ging iets mis bij het downloaden van het resourcepack."
+
+# Beperkingen tijdens het downloaden van de ResourcePack
+restrictions:
+  # Wanneer een waarde op true staat worden deze acties geblokkeerd
+  movement: true
+  jumping: true
+  flying: true
+  inventory-access: true
+  block-break: true
+  block-place: true
+  damage-protection: true
+  blindness: true
+
+# Extra instellingen
+# Hoeveel seconden nadat de ResourcePack klaar is met downloaden moet de speler imuun blijven voor aanvallen van mobs en spelers
+post-download-protection-seconds: 5
