@@ -10,11 +10,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerResourcePackStatusEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
@@ -23,6 +26,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.UUID;
+
+import org.bukkit.util.Vector;
 
 public class AssignPack extends JavaPlugin implements Listener, CommandExecutor {
 
@@ -72,6 +77,9 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
         if (config.getBoolean("restrictions.flying")) {
             target.setFlySpeed(0.0f);
             target.setAllowFlight(false);
+        }
+        if (config.getBoolean("restrictions.crouching")) {
+            // No direct effect to apply, handled by PlayerMoveEvent
         }
         
         target.setResourcePack(url);
@@ -128,6 +136,29 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
     }
 
     @EventHandler
+    public void onPlayerMove(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        if (pendingPacks.containsKey(player.getUniqueId())) {
+            // Prevent jumping
+            if (config.getBoolean("restrictions.jumping") && event.getTo().getY() > event.getFrom().getY()) {
+                event.setCancelled(true);
+                player.teleport(event.getFrom()); // Teleport back to prevent upward movement
+            }
+            // Prevent crouching (sneaking)
+            if (config.getBoolean("restrictions.crouching") && player.isSneaking()) {
+                event.setCancelled(true);
+            }
+            // Prevent horizontal movement if movement restriction is enabled
+            if (config.getBoolean("restrictions.movement")) {
+                if (event.getFrom().getX() != event.getTo().getX() || event.getFrom().getZ() != event.getTo().getZ()) {
+                    event.setCancelled(true);
+                    player.teleport(event.getFrom());
+                }
+            }
+        }
+    }
+
+    @EventHandler
     public void onPackStatus(PlayerResourcePackStatusEvent event) {
         Player player = event.getPlayer();
         
@@ -135,12 +166,11 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
         if (event.getStatus() == PlayerResourcePackStatusEvent.Status.SUCCESSFULLY_LOADED ||
             event.getStatus() == PlayerResourcePackStatusEvent.Status.DECLINED ||
             event.getStatus() == PlayerResourcePackStatusEvent.Status.FAILED_DOWNLOAD) {
-            
-            // Restore inventory if it was saved
             if (config.getBoolean("restrictions.inventory-access")) {
                 ItemStack[] savedItems = savedInventories.remove(player.getUniqueId());
                 if (savedItems != null) {
                     player.getInventory().setContents(savedItems);
+                    getLogger().info("Inventaris van " + player.getName() + " hersteld na resourcepack status: " + event.getStatus().name());
                 }
             }
             
@@ -191,5 +221,44 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
             event.getStatus() == PlayerResourcePackStatusEvent.Status.FAILED_DOWNLOAD) {
             pendingPacks.remove(player.getUniqueId());
         }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        if (savedInventories.containsKey(player.getUniqueId())) {
+            ItemStack[] savedItems = savedInventories.remove(player.getUniqueId());
+            player.getInventory().setContents(savedItems);
+            getLogger().info("Inventaris van " + player.getName() + " hersteld na disconnectie.");
+        }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+
+        // Remove all potion effects
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            player.removePotionEffect(effect.getType());
+        }
+
+        // Restore walk speed
+        player.setWalkSpeed(0.2f);
+
+        // Restore inventory if saved
+        if (savedInventories.containsKey(player.getUniqueId())) {
+            ItemStack[] savedItems = savedInventories.remove(player.getUniqueId());
+            if (savedItems != null) {
+                player.getInventory().setContents(savedItems);
+                getLogger().info("Inventaris van " + player.getName() + " hersteld na herverbinding.");
+            }
+        }
+
+        // Remove from pendingPacks if present
+        pendingPacks.remove(player.getUniqueId());
+
+        // Ensure jump effect is removed
+        player.removePotionEffect(PotionEffectType.JUMP);
+        player.setVelocity(new Vector(0, 0, 0));
     }
 }
