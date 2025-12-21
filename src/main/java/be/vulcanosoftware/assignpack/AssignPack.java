@@ -93,7 +93,6 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
             Player player = (Player) event.getPlayer();
             if (pendingPacks.containsKey(player.getUniqueId()) && config.getBoolean("restrictions.inventory-access")) {
                 event.setCancelled(true);
-                player.closeInventory();
             }
         }
     }
@@ -118,8 +117,14 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
     public void onEntityDamage(EntityDamageEvent event) {
         if (event.getEntity() instanceof Player) {
             Player player = (Player) event.getEntity();
-            if ((pendingPacks.containsKey(player.getUniqueId()) && config.getBoolean("restrictions.damage-protection")) ||
-                (protectionEndTimes.containsKey(player.getUniqueId()) && System.currentTimeMillis() < protectionEndTimes.get(player.getUniqueId()))) {
+            UUID uuid = player.getUniqueId();
+            Long protectionEnd = protectionEndTimes.get(uuid);
+            boolean hasPendingPack = pendingPacks.containsKey(uuid);
+            boolean damageProtectionEnabled = config.getBoolean("restrictions.damage-protection");
+            long now = System.currentTimeMillis();
+
+            if ((hasPendingPack && damageProtectionEnabled) ||
+                (protectionEnd != null && now < protectionEnd)) {
                 event.setCancelled(true);
             }
         }
@@ -129,7 +134,8 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player) {
             Player damager = (Player) event.getDamager();
-            if (pendingPacks.containsKey(damager.getUniqueId()) && config.getBoolean("restrictions.damage-protection")) {
+            UUID uuid = damager.getUniqueId();
+            if (pendingPacks.containsKey(uuid) && config.getBoolean("restrictions.damage-protection")) {
                 event.setCancelled(true);
             }
         }
@@ -138,22 +144,32 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (pendingPacks.containsKey(player.getUniqueId())) {
-            // Prevent jumping
-            if (config.getBoolean("restrictions.jumping") && event.getTo().getY() > event.getFrom().getY()) {
+        UUID uuid = player.getUniqueId();
+
+        if (!pendingPacks.containsKey(uuid)) {
+            return;
+        }
+
+        boolean restrictJumping = config.getBoolean("restrictions.jumping");
+        boolean restrictCrouching = config.getBoolean("restrictions.crouching");
+        boolean restrictMovement = config.getBoolean("restrictions.movement");
+
+        if (restrictJumping && event.getTo().getY() > event.getFrom().getY()) {
+            event.setCancelled(true);
+            event.setTo(event.getFrom());
+            return;
+        }
+
+        if (restrictCrouching && player.isSneaking()) {
+            event.setCancelled(true);
+            event.setTo(event.getFrom());
+            return;
+        }
+
+        if (restrictMovement) {
+            if (event.getFrom().getX() != event.getTo().getX() || event.getFrom().getZ() != event.getTo().getZ()) {
                 event.setCancelled(true);
-                player.teleport(event.getFrom()); // Teleport back to prevent upward movement
-            }
-            // Prevent crouching (sneaking)
-            if (config.getBoolean("restrictions.crouching") && player.isSneaking()) {
-                event.setCancelled(true);
-            }
-            // Prevent horizontal movement if movement restriction is enabled
-            if (config.getBoolean("restrictions.movement")) {
-                if (event.getFrom().getX() != event.getTo().getX() || event.getFrom().getZ() != event.getTo().getZ()) {
-                    event.setCancelled(true);
-                    player.teleport(event.getFrom());
-                }
+                event.setTo(event.getFrom());
             }
         }
     }
