@@ -1,11 +1,11 @@
 name: VulcanoCraftResourcePackAssigner
 main: be.vulcanosoftware.assignpack.AssignPack
-version: 1.2
+version: 1.3
 api-version: 1.20
 commands:
   assignpack:
-    description: Assign a resource pack to a player
-    usage: /assignpack <player> <url>
+    description: Assign a resource pack to a player with mirror failover and SHA-1 support
+    usage: /assignpack <player|list|test> [url1] [url2] ... [sha1|auto]
     permission: assignpack.use
 permissions:
   assignpack.use:
