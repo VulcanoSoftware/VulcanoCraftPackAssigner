@@ -1,3 +1,8 @@
+# Standaard gedrag voor /assignpack <speler> <url>
+# true = voegt de pack toe (stacking)
+# false = vervangt alle eerdere packs
+default-stacking: false
+
 # Kick instellingen
 kick-on-decline: true
 kick-on-failure: true
