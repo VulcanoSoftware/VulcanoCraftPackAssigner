@@ -57,6 +57,8 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     private FileConfiguration config;
+    private PackMirrorManager packMirrorManager;
+
     // Track pending pack UUIDs per player UUID
     private final Map<UUID, Set<UUID>> pendingPacks = new HashMap<>();
     // Track active resource packs sent/loaded for player
@@ -69,6 +71,7 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
     public void onEnable() {
         saveDefaultConfig();
         config = getConfig();
+        packMirrorManager = new PackMirrorManager();
         if (getCommand("assignpack") != null) {
             getCommand("assignpack").setExecutor(this);
             getCommand("assignpack").setTabCompleter(this);
@@ -76,8 +79,29 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
         getServer().getPluginManager().registerEvents(this, this);
     }
 
+    public PackMirrorManager getPackMirrorManager() {
+        return packMirrorManager;
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length < 1) {
+            sendHelp(sender);
+            return true;
+        }
+
+        // Global standalone commands: /assignpack list or /assignpack test <urls...>
+        if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
+            return handleGlobalList(sender);
+        }
+        if (args[0].equalsIgnoreCase("test")) {
+            if (args.length < 2) {
+                sender.sendMessage("Gebruik: /assignpack test <url1> [url2...]");
+                return true;
+            }
+            return handleTest(sender, Arrays.copyOfRange(args, 1, args.length));
+        }
+
         if (args.length < 2) {
             sendHelp(sender);
             return true;
@@ -101,45 +125,103 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
                 return true;
             }
             return handleRemove(sender, target, args[2]);
+        } else if (arg1.equals("test")) {
+            if (args.length < 3) {
+                sender.sendMessage("Gebruik: /assignpack <speler> test <url1> [url2...]");
+                return true;
+            }
+            return handleTest(sender, Arrays.copyOfRange(args, 2, args.length));
         } else if (arg1.equals("add")) {
             if (args.length < 3) {
-                sender.sendMessage("Gebruik: /assignpack <speler> add <url> [hash] [uuid] [required]");
+                sender.sendMessage("Gebruik: /assignpack <speler> add <url1> [url2...] [sha1|auto] [uuid] [required]");
                 return true;
             }
-            String url = args[2];
-            String hash = args.length > 3 ? args[3] : null;
-            String uuidStr = args.length > 4 ? args[4] : null;
-            boolean required = args.length > 5 && Boolean.parseBoolean(args[5]);
-            return handleSendPack(sender, target, url, hash, uuidStr, required, false);
+            String[] rawPackArgs = Arrays.copyOfRange(args, 2, args.length);
+            return handleSendPackMulti(sender, target, rawPackArgs, false);
         } else if (arg1.equals("set")) {
             if (args.length < 3) {
-                sender.sendMessage("Gebruik: /assignpack <speler> set <url> [hash] [uuid] [required]");
+                sender.sendMessage("Gebruik: /assignpack <speler> set <url1> [url2...] [sha1|auto] [uuid] [required]");
                 return true;
             }
-            String url = args[2];
-            String hash = args.length > 3 ? args[3] : null;
-            String uuidStr = args.length > 4 ? args[4] : null;
-            boolean required = args.length > 5 && Boolean.parseBoolean(args[5]);
-            return handleSendPack(sender, target, url, hash, uuidStr, required, true);
+            String[] rawPackArgs = Arrays.copyOfRange(args, 2, args.length);
+            return handleSendPackMulti(sender, target, rawPackArgs, true);
         } else {
-            // Legacy syntax: /assignpack <speler> <url> [hash] [required]
-            String url = args[1];
-            String hash = args.length > 2 ? args[2] : null;
-            boolean required = args.length > 3 && Boolean.parseBoolean(args[3]);
+            // Legacy / default syntax: /assignpack <speler> <url1> [url2...] [sha1|auto] [required]
+            String[] rawPackArgs = Arrays.copyOfRange(args, 1, args.length);
             boolean defaultStacking = config.getBoolean("default-stacking", false);
             boolean replace = !defaultStacking;
-            return handleSendPack(sender, target, url, hash, null, required, replace);
+            return handleSendPackMulti(sender, target, rawPackArgs, replace);
         }
     }
 
     private void sendHelp(CommandSender sender) {
         sender.sendMessage("Gebruik:");
-        sender.sendMessage("/assignpack <speler> <url> [hash] [required]");
-        sender.sendMessage("/assignpack <speler> add <url> [hash] [uuid] [required]");
-        sender.sendMessage("/assignpack <speler> set <url> [hash] [uuid] [required]");
+        sender.sendMessage("/assignpack <speler> <url1> [url2...] [sha1|auto] [required]");
+        sender.sendMessage("/assignpack <speler> add <url1> [url2...] [sha1|auto] [uuid] [required]");
+        sender.sendMessage("/assignpack <speler> set <url1> [url2...] [sha1|auto] [uuid] [required]");
         sender.sendMessage("/assignpack <speler> remove <uuid|index|url>");
         sender.sendMessage("/assignpack <speler> clear");
         sender.sendMessage("/assignpack <speler> list");
+        sender.sendMessage("/assignpack list");
+        sender.sendMessage("/assignpack test <url1> [url2...]");
+    }
+
+    private boolean handleGlobalList(CommandSender sender) {
+        PackMirrorManager.LastUsedInfo lastUsed = packMirrorManager.getLastUsedInfo();
+        if (lastUsed == null || lastUsed.getMirrors().isEmpty()) {
+            sender.sendMessage("Er zijn nog geen resourcepacks of mirrors verwerkt.");
+            return true;
+        }
+
+        sender.sendMessage("Laatst gebruikte mirrors (" + lastUsed.getMirrors().size() + "):");
+        for (int i = 0; i < lastUsed.getMirrors().size(); i++) {
+            String m = lastUsed.getMirrors().get(i);
+            if (m.equals(lastUsed.getSelectedMirror())) {
+                sender.sendMessage((i + 1) + ". " + m + " [ACTIEF]");
+            } else {
+                sender.sendMessage((i + 1) + ". " + m);
+            }
+        }
+        sender.sendMessage("Geselecteerde mirror: " + lastUsed.getSelectedMirror());
+        sender.sendMessage("SHA-1 Hash: " + (lastUsed.getHash() != null && !lastUsed.getHash().isEmpty() ? lastUsed.getHash() : "Geen hash"));
+        return true;
+    }
+
+    private boolean handleTest(CommandSender sender, String[] urlArgs) {
+        if (urlArgs == null || urlArgs.length == 0) {
+            sender.sendMessage("Geef minstens één URL op om te testen.");
+            return true;
+        }
+
+        List<String> urls = Arrays.asList(urlArgs);
+        sender.sendMessage("Bezig met testen van " + urls.size() + " mirror(s)...");
+
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            PackMirrorManager.MirrorTestSummary summary = packMirrorManager.testMirrors(urls);
+            Bukkit.getScheduler().runTask(this, () -> {
+                sender.sendMessage("--- Mirror Test Resultaten ---");
+                List<PackMirrorManager.MirrorTestItem> items = summary.getResults();
+                for (int i = 0; i < items.size(); i++) {
+                    PackMirrorManager.MirrorTestItem item = items.get(i);
+                    if (item.isSuccess()) {
+                        sender.sendMessage((i + 1) + ". " + item.getUrl() + " -> " + item.getStatusCode() + " OK (" + item.getDurationMs() + "ms)");
+                    } else if (item.getStatusCode() > 0) {
+                        sender.sendMessage((i + 1) + ". " + item.getUrl() + " -> HTTP " + item.getStatusCode() + " (" + item.getDurationMs() + "ms)");
+                    } else {
+                        sender.sendMessage((i + 1) + ". " + item.getUrl() + " -> " + (item.getError() != null ? item.getError() : "Niet bereikbaar") + " (" + item.getDurationMs() + "ms)");
+                    }
+                }
+
+                if (summary.getSelectedUrl() != null) {
+                    sender.sendMessage("Eerste werkende mirror: " + summary.getSelectedUrl());
+                    sender.sendMessage("SHA-1 via .sha1: " + (summary.getFetchedHash() != null ? summary.getFetchedHash() : "Niet gevonden"));
+                } else {
+                    sender.sendMessage("Geen werkende mirrors gevonden.");
+                }
+            });
+        });
+
+        return true;
     }
 
     private boolean handleClear(CommandSender sender, Player target) {
@@ -160,7 +242,8 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
         sender.sendMessage("Actieve resourcepacks van " + target.getName() + " (" + packs.size() + "):");
         for (int i = 0; i < packs.size(); i++) {
             PackEntry pack = packs.get(i);
-            sender.sendMessage((i + 1) + ". UUID: " + pack.getUuid() + " | URL: " + pack.getUrl());
+            String hashStr = (pack.getHash() != null && !pack.getHash().isEmpty()) ? " | Hash: " + pack.getHash() : "";
+            sender.sendMessage((i + 1) + ". UUID: " + pack.getUuid() + " | URL: " + pack.getUrl() + hashStr);
         }
         return true;
     }
@@ -216,57 +299,81 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
         return true;
     }
 
-    private boolean handleSendPack(CommandSender sender, Player target, String url, String hash, String uuidStr, boolean required, boolean replace) {
-        UUID packUuid;
-        if (uuidStr != null && !uuidStr.isEmpty()) {
-            try {
-                packUuid = UUID.fromString(uuidStr);
-            } catch (IllegalArgumentException e) {
-                sender.sendMessage("Ongeldige UUID indeling.");
-                return true;
-            }
-        } else {
-            packUuid = UUID.nameUUIDFromBytes((target.getUniqueId().toString() + url).getBytes());
+    private boolean handleSendPackMulti(CommandSender sender, Player target, String[] rawPackArgs, boolean replace) {
+        PackMirrorManager.ParsedArgs parsed = PackMirrorManager.parsePackArgs(rawPackArgs);
+        if (parsed == null || parsed.getUrls().isEmpty()) {
+            sender.sendMessage("Ongeldige invoer. Geef minstens één URL op.");
+            return true;
         }
 
-        try {
-            URI uri = URI.create(url);
-            ResourcePackInfo.Builder infoBuilder = ResourcePackInfo.resourcePackInfo()
-                    .id(packUuid)
-                    .uri(uri);
+        sender.sendMessage("Bezig met selecteren van mirror en hash voor " + target.getName() + "...");
 
-            if (hash != null && !hash.isEmpty()) {
-                infoBuilder.hash(hash);
-            }
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            List<String> urls = parsed.getUrls();
+            String selectedUrl = packMirrorManager.selectFirstWorkingMirror(urls);
+            String finalHash = packMirrorManager.resolveHash(parsed.getHash(), selectedUrl);
 
-            ResourcePackInfo packInfo = infoBuilder.build();
-            ResourcePackRequest request = ResourcePackRequest.resourcePackRequest()
-                    .packs(packInfo)
-                    .replace(replace)
-                    .required(required)
-                    .build();
+            packMirrorManager.recordLastUsed(urls, selectedUrl, finalHash);
 
-            // Track state
-            UUID playerUuid = target.getUniqueId();
-            pendingPacks.computeIfAbsent(playerUuid, k -> new HashSet<>()).add(packUuid);
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!target.isOnline()) {
+                    sender.sendMessage("Speler " + target.getName() + " is niet meer online.");
+                    return;
+                }
 
-            if (replace) {
-                List<PackEntry> list = new ArrayList<>();
-                list.add(new PackEntry(packUuid, url, hash));
-                activePacks.put(playerUuid, list);
-            } else {
-                List<PackEntry> list = activePacks.computeIfAbsent(playerUuid, k -> new ArrayList<>());
-                list.removeIf(p -> p.getUuid().equals(packUuid));
-                list.add(new PackEntry(packUuid, url, hash));
-            }
+                UUID packUuid;
+                if (parsed.getUuidStr() != null && !parsed.getUuidStr().isEmpty()) {
+                    try {
+                        packUuid = UUID.fromString(parsed.getUuidStr());
+                    } catch (IllegalArgumentException e) {
+                        sender.sendMessage("Ongeldige UUID indeling.");
+                        return;
+                    }
+                } else {
+                    packUuid = UUID.nameUUIDFromBytes((target.getUniqueId().toString() + selectedUrl).getBytes());
+                }
 
-            applyRestrictions(target);
+                try {
+                    URI uri = URI.create(selectedUrl);
+                    ResourcePackInfo.Builder infoBuilder = ResourcePackInfo.resourcePackInfo()
+                            .id(packUuid)
+                            .uri(uri);
 
-            target.sendResourcePacks(request);
-            sender.sendMessage("Resourcepack verstuurd naar " + target.getName() + " (replace=" + replace + ")");
-        } catch (Exception e) {
-            sender.sendMessage("Fout bij versturen resourcepack: " + e.getMessage());
-        }
+                    if (finalHash != null && !finalHash.isEmpty()) {
+                        infoBuilder.hash(finalHash);
+                    }
+
+                    ResourcePackInfo packInfo = infoBuilder.build();
+                    ResourcePackRequest request = ResourcePackRequest.resourcePackRequest()
+                            .packs(packInfo)
+                            .replace(replace)
+                            .required(parsed.isRequired())
+                            .build();
+
+                    // Track state
+                    UUID playerUuid = target.getUniqueId();
+                    pendingPacks.computeIfAbsent(playerUuid, k -> new HashSet<>()).add(packUuid);
+
+                    if (replace) {
+                        List<PackEntry> list = new ArrayList<>();
+                        list.add(new PackEntry(packUuid, selectedUrl, finalHash));
+                        activePacks.put(playerUuid, list);
+                    } else {
+                        List<PackEntry> list = activePacks.computeIfAbsent(playerUuid, k -> new ArrayList<>());
+                        list.removeIf(p -> p.getUuid().equals(packUuid));
+                        list.add(new PackEntry(packUuid, selectedUrl, finalHash));
+                    }
+
+                    applyRestrictions(target);
+
+                    target.sendResourcePacks(request);
+                    String hashMsg = (finalHash != null && !finalHash.isEmpty()) ? " [hash=" + finalHash + "]" : " [geen hash]";
+                    sender.sendMessage("Resourcepack verstuurd naar " + target.getName() + " via " + selectedUrl + hashMsg + " (replace=" + replace + ")");
+                } catch (Exception e) {
+                    sender.sendMessage("Fout bij versturen resourcepack: " + e.getMessage());
+                }
+            });
+        });
 
         return true;
     }
@@ -327,17 +434,23 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
 
         if (args.length == 1) {
             String partial = args[0].toLowerCase();
+            if ("list".startsWith(partial)) completions.add("list");
+            if ("test".startsWith(partial)) completions.add("test");
             for (Player player : Bukkit.getOnlinePlayers()) {
                 if (player.getName().toLowerCase().startsWith(partial)) {
                     completions.add(player.getName());
                 }
             }
         } else if (args.length == 2) {
-            String partial = args[1].toLowerCase();
-            List<String> subcommands = Arrays.asList("add", "set", "clear", "remove", "list");
-            for (String sub : subcommands) {
-                if (sub.startsWith(partial)) {
-                    completions.add(sub);
+            if (args[0].equalsIgnoreCase("test")) {
+                completions.add("https://");
+            } else {
+                String partial = args[1].toLowerCase();
+                List<String> subcommands = Arrays.asList("add", "set", "clear", "remove", "list", "test");
+                for (String sub : subcommands) {
+                    if (sub.startsWith(partial)) {
+                        completions.add(sub);
+                    }
                 }
             }
         } else if (args.length == 3) {
@@ -360,13 +473,16 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
                         }
                     }
                 }
+            } else if (sub.equals("add") || sub.equals("set")) {
+                String partial = args[2].toLowerCase();
+                if ("auto".startsWith(partial)) completions.add("auto");
+                if ("https://".startsWith(partial)) completions.add("https://");
             }
-        } else if (args.length == 6) {
-            String sub = args[1].toLowerCase();
-            if (sub.equals("add") || sub.equals("set")) {
-                completions.add("true");
-                completions.add("false");
-            }
+        } else {
+            String last = args[args.length - 1].toLowerCase();
+            if ("auto".startsWith(last)) completions.add("auto");
+            if ("true".startsWith(last)) completions.add("true");
+            if ("false".startsWith(last)) completions.add("false");
         }
 
         return completions;
