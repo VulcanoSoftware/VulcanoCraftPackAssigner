@@ -109,6 +109,57 @@ class PackMirrorManagerTest {
     }
 
     @Test
+    void testParsePackArgs_OptionalHashOmittedWithUuidAndRequired() {
+        String uuid = "123e4567-e89b-12d3-a456-426614174000";
+        String[] args = new String[]{
+                "https://github.com/test/pack.zip",
+                uuid,
+                "true"
+        };
+        PackMirrorManager.ParsedArgs parsed = PackMirrorManager.parsePackArgs(args);
+
+        assertNotNull(parsed);
+        assertEquals(1, parsed.getUrls().size());
+        assertEquals("https://github.com/test/pack.zip", parsed.getUrls().get(0));
+        assertNull(parsed.getHash());
+        assertEquals(uuid, parsed.getUuidStr());
+        assertTrue(parsed.isRequired());
+        assertTrue(parsed.isAutoSha1());
+    }
+
+    @Test
+    void testParsePackArgs_OptionalHashOmittedWithRequiredOnly() {
+        String[] args = new String[]{
+                "https://github.com/test/pack.zip",
+                "true"
+        };
+        PackMirrorManager.ParsedArgs parsed = PackMirrorManager.parsePackArgs(args);
+
+        assertNotNull(parsed);
+        assertEquals(1, parsed.getUrls().size());
+        assertEquals("https://github.com/test/pack.zip", parsed.getUrls().get(0));
+        assertNull(parsed.getHash());
+        assertNull(parsed.getUuidStr());
+        assertTrue(parsed.isRequired());
+    }
+
+    @Test
+    void testParsePackArgs_WithNoneHash() {
+        String[] args = new String[]{
+                "https://github.com/test/pack.zip",
+                "none"
+        };
+        PackMirrorManager.ParsedArgs parsed = PackMirrorManager.parsePackArgs(args);
+
+        assertNotNull(parsed);
+        assertEquals(1, parsed.getUrls().size());
+        assertEquals("none", parsed.getHash());
+
+        String resolved = manager.resolveHash("none", "https://github.com/test/pack.zip");
+        assertNull(resolved);
+    }
+
+    @Test
     void testParsePackArgs_EmptyOrNull() {
         assertNull(PackMirrorManager.parsePackArgs(null));
         assertNull(PackMirrorManager.parsePackArgs(new String[0]));

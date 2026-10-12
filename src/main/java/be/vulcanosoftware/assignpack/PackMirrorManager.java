@@ -179,10 +179,10 @@ public class PackMirrorManager {
             }
         }
 
-        // 3. Check last arg for hash or "auto"
+        // 3. Check last arg for hash, "auto", "none", or empty string hash indicator
         if (!argList.isEmpty()) {
             String last = argList.get(argList.size() - 1);
-            if (last.equalsIgnoreCase("auto") || last.matches("^[a-fA-F0-9]{40}$")) {
+            if (last.equalsIgnoreCase("auto") || last.equalsIgnoreCase("none") || last.matches("^[a-fA-F0-9]{40}$")) {
                 hash = last;
                 argList.remove(argList.size() - 1);
             }
@@ -285,10 +285,14 @@ public class PackMirrorManager {
 
     /**
      * Resolves final SHA-1 hash to use for a pack URL.
+     * If hashParam is explicit "none", returns null.
      * If hashParam is explicit 40 hex chars, use it.
      * If hashParam is null or "auto", attempts to fetch .sha1 sidecar file.
      */
     public String resolveHash(String hashParam, String packUrl) {
+        if (hashParam != null && hashParam.equalsIgnoreCase("none")) {
+            return null;
+        }
         if (hashParam != null && !hashParam.equalsIgnoreCase("auto") && hashParam.matches("^[a-fA-F0-9]{40}$")) {
             return hashParam.toLowerCase();
         }

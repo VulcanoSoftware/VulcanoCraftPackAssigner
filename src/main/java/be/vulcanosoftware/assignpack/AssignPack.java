@@ -156,9 +156,9 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
 
     private void sendHelp(CommandSender sender) {
         sender.sendMessage("Gebruik:");
-        sender.sendMessage("/assignpack <speler> <url1> [url2...] [sha1|auto] [required]");
-        sender.sendMessage("/assignpack <speler> add <url1> [url2...] [sha1|auto] [uuid] [required]");
-        sender.sendMessage("/assignpack <speler> set <url1> [url2...] [sha1|auto] [uuid] [required]");
+        sender.sendMessage("/assignpack <speler> <url1> [url2...] [sha1|auto|none] [required]");
+        sender.sendMessage("/assignpack <speler> add <url1> [url2...] [sha1|auto|none] [uuid] [required]");
+        sender.sendMessage("/assignpack <speler> set <url1> [url2...] [sha1|auto|none] [uuid] [required]");
         sender.sendMessage("/assignpack <speler> remove <uuid|index|url>");
         sender.sendMessage("/assignpack <speler> clear");
         sender.sendMessage("/assignpack <speler> list");
@@ -481,6 +481,7 @@ public class AssignPack extends JavaPlugin implements Listener, CommandExecutor,
         } else {
             String last = args[args.length - 1].toLowerCase();
             if ("auto".startsWith(last)) completions.add("auto");
+            if ("none".startsWith(last)) completions.add("none");
             if ("true".startsWith(last)) completions.add("true");
             if ("false".startsWith(last)) completions.add("false");
         }
